@@ -348,12 +348,17 @@ async def show_hse_programs(message: types.Message, state: FSMContext):
     try:
         data = await state.get_data()
         user_scores = data.get("scores", {})
-        total_score = sum(user_scores.values())
         
-        response = ["📚 Подходящие программы МФТИ бебебе:"]
+        # Расчет базовых баллов
+        rus = user_scores.get("rus", 0)
+        math = user_scores.get("math", 0)
+        fiz = user_scores.get("fiz", 0)
+        inf = user_scores.get("inf", 0)
+        
+        response = ["📚 Подходящие программы МФТИ:"]
         has_programs = False
         
-        target_university = "Физтех"
+        target_university = "МФТИ"
         if target_university not in UNIVERSITIES:
             await message.answer("Данные по МФТИ не найдены")
             return
@@ -363,70 +368,77 @@ async def show_hse_programs(message: types.Message, state: FSMContext):
             
             for program in programs:
                 meets_requirements = True
+                
+                # Определение способа расчета баллов
+                if program["optional"]:
+                    # Случай с выборочными предметами
+                    total_score = rus + math + max(fiz, inf)
+                elif program["fiz"] is None or program["inf"] is None:
+                    # Случай с прочерком в одном из предметов
+                    total_score = rus + math + (fiz if program["inf"] is None else inf)
+                else:
+                    # Общий случай (4 предмета)
+                    total_score = rus + math + fiz + inf
+                
                 score_diff = program["total_score"] - total_score
                 
-                # Проверка обязательных предметов
-                if program["math"] is not None and\
-                      user_scores.get("math", 0) < program["math"]:
-                    meets_requirements = False
-                if program["rus"] is not None and \
-                    user_scores.get("rus", 0) < program["rus"]:
-                    meets_requirements = False
+                # Проверка минимальных баллов по предметам
+                required_checks = [
+                    ("math", program["math"]),
+                    ("rus", program["rus"]),
+                    ("fiz", program["fiz"]),
+                    ("inf", program["inf"])
+                ]
                 
-                # Проверка выборочных или обязательных предметов
+                for subject, min_score in required_checks:
+                    if min_score is not None and user_scores.get(subject, 0) < min_score:
+                        meets_requirements = False
+                        break
+                
+                # Проверка выборочных предметов
                 if program["optional"]:
-                    # Только выборочные предметы
                     elective_passed = any(
                         user_scores.get(subj, 0) >= program.get(subj, 0)
                         for subj in program["optional"]
-                        if subj in user_scores
                     )
                     if not elective_passed:
                         meets_requirements = False
-                else:
-                    # Обязательные предметы (если нет выборочных)
-                    if program["fiz"] is not None and\
-                          user_scores.get("fiz", 0) < program["fiz"]:
-                        meets_requirements = False
-                    if program["inf"] is not None and\
-                          user_scores.get("inf", 0) < program["inf"]:
-                        meets_requirements = False
-                
+
                 # Проверка проходного балла
                 if meets_requirements and total_score + 10 < program["total_score"]:
                     meets_requirements = False
                 
-                min_scores = []
-                for subj, name in [("math", "Математика"), ("rus", "Русский"), 
-                                     ("fiz", "Физика"), ("inf", "Информатика")]:
-                        if program[subj] is not None:
-                            min_scores.append(f"{name}: {program[subj]}")
-
-
+                # Формирование информации о программе
                 if meets_requirements:
-                    # Форматирование программы
-                    program_info = [
-                        f"🎓 Программа: {program['description']}",
-                        f"├ Минимум: {', '.join(min_scores)}\n"
-                        
+                    min_scores = [
+                        f"{name}: {program[subj]}" 
+                        for subj, name in [
+                            ("math", "Математика"), 
+                            ("rus", "Русский"),
+                            ("fiz", "Физика"),
+                            ("inf", "Информатика")
+                        ] 
+                        if program[subj] is not None
                     ]
                     
-                    
-                    
-                    
-                    
-                    # Добавляем статус
+                    program_info = [
+                        f"🎓 Программа: {program['description']}",
+                        f"├ Минимум: {', '.join(min_scores)}",
+                        f"├ Твой суммарный балл: {total_score}",
+                    ]
+
                     if total_score >= program["total_score"]:
-                        program_info.append(f"├ Примерный проходной балл: {program['total_score']} \n"
-                                            f"├ ✅ Вероятность пройти очень высокая!\n"
-                                            f"└ ДВИ: {'✅' if program['dvi_required'] == 'да' else 'Не требуется'}\n"
-                                            )
+                        program_info.extend([
+                            f"├ Примерный проходной балл: {program['total_score']}",
+                            "├ ✅ Вероятность пройти очень высокая!",
+                            f"└ ДВИ: {'✅' if program['dvi_required'] == 'да' else 'Не требуется'}"
+                        ])
                     else:
-                        program_info.append(
-                            f"⚠️ Вероятность пройти достаточно высокая! (Не хватает ~{score_diff} баллов\n"
-                            f"├ Проверь, есть ли у тебя баллы за индивидуальные достижения.\n"
-                            f"└ ДВИ: {'✅' if program['dvi_required'] == 'да' else 'Не требуется'}\n"
-                        )
+                        program_info.extend([
+                            f"⚠️ Не хватает ~{score_diff} баллов",
+                            "├ Проверь индивидуальные достижения",
+                            f"└ ДВИ: {'✅' if program['dvi_required'] == 'да' else 'Не требуется'}"
+                        ])
                     
                     direction_programs.append("\n".join(program_info))
                     has_programs = True
@@ -435,12 +447,12 @@ async def show_hse_programs(message: types.Message, state: FSMContext):
                 response.append(f"\n🔹 {direction}:")
                 response.extend(direction_programs)
                 
-        await message.answer("\n".join(response) if\
-                              has_programs else "😔 Нет подходящих программ")
+        await message.answer("\n".join(response) if has_programs else "😔 Нет подходящих программ")
         
     except Exception as e:
         await message.answer(f"Ошибка: {str(e)}")
         print(f"Ошибка: {e}")
+
 
 
 
@@ -450,7 +462,12 @@ async def show_msu_programs(message: types.Message, state: FSMContext):
     try:
         data = await state.get_data()
         user_scores = data.get("scores", {})
-        total_score = sum(user_scores.values())
+        
+        # Расчет базовых баллов
+        rus = user_scores.get("rus", 0)
+        math = user_scores.get("math", 0)
+        fiz = user_scores.get("fiz", 0)
+        inf = user_scores.get("inf", 0)
         
         response = ["📚 Подходящие программы МГУ:"]
         has_programs = False
@@ -467,72 +484,79 @@ async def show_msu_programs(message: types.Message, state: FSMContext):
             
             for program in programs:
                 meets_requirements = True
-                score_diff = program["total_score"] - total_score
                 is_near = False
 
-                # Проверка минимальных баллов
-                if program["math"] is not None \
-                    and user_scores.get("math", 0) < program["math"]:
-                    meets_requirements = False
-                if program["rus"] is not None and\
-                      user_scores.get("rus", 0) < program["rus"]:
-                    meets_requirements = False
+                # Определение способа расчета баллов
+                if program["optional"]:
+                    total_score = rus + math + max(fiz, inf)
+                elif program["fiz"] is None or program["inf"] is None:
+                    total_score = rus + math + (fiz if program["inf"] is None else inf)
+                else:
+                    total_score = rus + math + fiz + inf
                 
-                # Проверка выборочных/обязательных предметов
+                score_diff = program["total_score"] - total_score
+
+                # Проверка минимальных баллов по предметам
+                required_checks = [
+                    ("math", program["math"]),
+                    ("rus", program["rus"]),
+                    ("fiz", program["fiz"]),
+                    ("inf", program["inf"])
+                ]
+                
+                for subject, min_score in required_checks:
+                    if min_score is not None and user_scores.get(subject, 0) < min_score:
+                        meets_requirements = False
+                        break
+
+                # Проверка выборочных предметов
                 if program["optional"]:
                     elective_passed = any(
                         user_scores.get(subj, 0) >= program.get(subj, 0)
                         for subj in program["optional"]
-                        if subj in user_scores
                     )
                     if not elective_passed:
                         meets_requirements = False
-                else:
-                    if program["fiz"] is not None and\
-                          user_scores.get("fiz", 0) < program["fiz"]:
-                        meets_requirements = False
-                    if program["inf"] is not None and\
-                          user_scores.get("inf", 0) < program["inf"]:
-                        meets_requirements = False
 
-                # Особые условия для МГУ с ДВИ
+                # Особые условия для ДВИ
                 if program["dvi_required"] == "да":
-                    # Проверяем разницу баллов с учетом порога ДВИ
                     if meets_requirements and (0 < score_diff <= DVI_THRESHOLD):
                         is_near = True
                     elif total_score < program["total_score"] - DVI_THRESHOLD:
                         meets_requirements = False
                 else:
-                    # Стандартная проверка для программ без ДВИ
                     if meets_requirements and total_score < program["total_score"]:
                         meets_requirements = False
 
                 if meets_requirements:
-                    program_info = [
-                        f"🎓 {program['description']}",
-                        f"├ Минимум: Математика: {program['math']}, Русский: {program['rus']}"
+                    # Формирование информации о предметах
+                    min_scores = [
+                        f"{name}: {program[subj]}" 
+                        for subj, name in [
+                            ("math", "Математика"), 
+                            ("rus", "Русский"),
+                            ("fiz", "Физика"),
+                            ("inf", "Информатика")
+                        ] 
+                        if program[subj] is not None
                     ]
                     
-                    # Добавляем предметные требования
-                    if program["optional"]:
-                        subs = {"fiz": "Физика", "inf": "Информатика"}
-                        program_info.append(
-                            f"├ Выборочные: {', '.join(subs[s] for s in program['optional'])}"
-                        )
-                    else:
-                        if program["fiz"] is not None:
-                            program_info.append(f"├ Физика: {program['fiz']}")
-                        if program["inf"] is not None:
-                            program_info.append(f"├ Информатика: {program['inf']}")
-                    
-                    # Добавляем статус
+                    program_info = [
+                        f"🎓 Программа: {program['description']}",
+                        f"├ Минимум: {', '.join(min_scores)}",
+                        f"├ Твой суммарный балл: {total_score}",
+                    ]
+
+                    # Добавляем информацию о ДВИ
                     if is_near:
-                        program_info.append(
-                            f"⚠️ Вероятность пройти высокая с ДВИ! (Не хватает {score_diff} баллов)\n"
+                        program_info.extend([
+                            f"⚠️ Вероятность пройти с ДВИ! (Не хватает {score_diff} баллов)",
                             f"└ Минимальный балл ДВИ: {program['dvi_min_score']}"
-                        )
+                        ])
                     else:
-                        program_info.append(f"└ ДВИ: {'✅ Требуется' if program['dvi_required'] == 'да' else '❌ Не требуется'}")
+                        program_info.append(
+                            f"└ ДВИ: {'✅ Требуется' if program['dvi_required'] == 'да' else '❌ Не требуется'}"
+                        )
                     
                     direction_programs.append("\n".join(program_info))
                     has_programs = True
@@ -541,13 +565,11 @@ async def show_msu_programs(message: types.Message, state: FSMContext):
                 response.append(f"\n🔹 {direction}:")
                 response.extend(direction_programs)
         
-        await message.answer("\n".join(response) if\
-                              has_programs else "😔 Нет подходящих программ")
+        await message.answer("\n".join(response) if has_programs else "😔 Нет подходящих программ")
         
     except Exception as e:
         await message.answer(f"Ошибка: {str(e)}")
         print(f"Ошибка: {e}")
-
 
 
 @router.message(Command("bmstu"))
@@ -555,7 +577,12 @@ async def show_hse_programs(message: types.Message, state: FSMContext):
     try:
         data = await state.get_data()
         user_scores = data.get("scores", {})
-        total_score = sum(user_scores.values())
+        
+        # Расчет базовых баллов
+        rus = user_scores.get("rus", 0)
+        math = user_scores.get("math", 0)
+        fiz = user_scores.get("fiz", 0)
+        inf = user_scores.get("inf", 0)
         
         response = ["📚 Подходящие программы МГТУ им. Баумана:"]
         has_programs = False
@@ -570,72 +597,77 @@ async def show_hse_programs(message: types.Message, state: FSMContext):
             
             for program in programs:
                 meets_requirements = True
+                
+                # Определение способа расчета баллов
+                if program["optional"]:
+                    # Случай с выборочными предметами
+                    total_score = rus + math + max(fiz, inf)
+                elif program["fiz"] is None or program["inf"] is None:
+                    # Случай с прочерком в одном из предметов
+                    total_score = rus + math + (fiz if program["inf"] is None else inf)
+                else:
+                    # Общий случай (4 предмета)
+                    total_score = rus + math + fiz + inf
+                
                 score_diff = program["total_score"] - total_score
                 
-                # Проверка обязательных предметов
-                if program["math"] is not None and\
-                      user_scores.get("math", 0) < program["math"]:
-                    meets_requirements = False
-                if program["rus"] is not None and\
-                      user_scores.get("rus", 0) < program["rus"]:
-                    meets_requirements = False
+                # Проверка минимальных баллов по предметам
+                required_checks = [
+                    ("math", program["math"]),
+                    ("rus", program["rus"]),
+                    ("fiz", program["fiz"]),
+                    ("inf", program["inf"])
+                ]
                 
-                # Проверка выборочных или обязательных предметов
+                for subject, min_score in required_checks:
+                    if min_score is not None and user_scores.get(subject, 0) < min_score:
+                        meets_requirements = False
+                        break
+                
+                # Проверка выборочных предметов
                 if program["optional"]:
-                    # Только выборочные предметы
                     elective_passed = any(
                         user_scores.get(subj, 0) >= program.get(subj, 0)
                         for subj in program["optional"]
-                        if subj in user_scores
                     )
                     if not elective_passed:
                         meets_requirements = False
-                else:
-                    # Обязательные предметы (если нет выборочных)
-                    if program["fiz"] is not None and\
-                          user_scores.get("fiz", 0) < program["fiz"]:
-                        meets_requirements = False
-                    if program["inf"] is not None and\
-                          user_scores.get("inf", 0) < program["inf"]:
-                        meets_requirements = False
-                
+
                 # Проверка проходного балла
-                if meets_requirements and\
-                      total_score + 10 < program["total_score"]:
+                if meets_requirements and total_score + 10 < program["total_score"]:
                     meets_requirements = False
                 
-                min_scores = []
-                for subj, name in [("math", "Математика"), ("rus", "Русский"), 
-                                     ("fiz", "Физика"),\
-                                          ("inf", "Информатика")]:
-                        if program[subj] is not None:
-                            min_scores.append(f"{name}: {program[subj]}")
-
-
+                # Формирование информации о программе
                 if meets_requirements:
-                    # Форматирование программы
-                    program_info = [
-                        f"🎓 Программа: {program['description']}",
-                        f"├ Минимум: {', '.join(min_scores)}\n"
-                        
+                    min_scores = [
+                        f"{name}: {program[subj]}" 
+                        for subj, name in [
+                            ("math", "Математика"), 
+                            ("rus", "Русский"),
+                            ("fiz", "Физика"),
+                            ("inf", "Информатика")
+                        ] 
+                        if program[subj] is not None
                     ]
                     
-                    
-                    
-                    
-                    
-                    # Добавляем статус
+                    program_info = [
+                        f"🎓 Программа: {program['description']}",
+                        f"├ Минимум: {', '.join(min_scores)}",
+                        f"├ Твой суммарный балл: {total_score}",
+                    ]
+
                     if total_score >= program["total_score"]:
-                        program_info.append(f"├ Примерный проходной балл: {program['total_score']} \n"
-                                            f"├ ✅ Вероятность пройти очень высокая!\n"
-                                            f"└ ДВИ: {'✅' if program['dvi_required'] == 'да' else 'Не требуется'}\n"
-                                            )
+                        program_info.extend([
+                            f"├ Примерный проходной балл: {program['total_score']}",
+                            "├ ✅ Вероятность пройти очень высокая!",
+                            f"└ ДВИ: {'✅' if program['dvi_required'] == 'да' else 'Не требуется'}"
+                        ])
                     else:
-                        program_info.append(
-                            f"⚠️ Вероятность пройти достаточно высокая! (Не хватает ~{score_diff} баллов\n"
-                            f"├ Проверь, есть ли у тебя баллы за индивидуальные достижения.\n"
-                            f"└ ДВИ: {'✅' if program['dvi_required'] == 'да' else 'Не требуется'}\n"
-                        )
+                        program_info.extend([
+                            f"⚠️ Не хватает ~{score_diff} баллов",
+                            "├ Проверь индивидуальные достижения",
+                            f"└ ДВИ: {'✅' if program['dvi_required'] == 'да' else 'Не требуется'}"
+                        ])
                     
                     direction_programs.append("\n".join(program_info))
                     has_programs = True
@@ -644,9 +676,7 @@ async def show_hse_programs(message: types.Message, state: FSMContext):
                 response.append(f"\n🔹 {direction}:")
                 response.extend(direction_programs)
                 
-        
-        await message.answer("\n".join(response) if\
-                              has_programs else "😔 Нет подходящих программ")
+        await message.answer("\n".join(response) if has_programs else "😔 Нет подходящих программ")
         
     except Exception as e:
         await message.answer(f"Ошибка: {str(e)}")
@@ -659,7 +689,12 @@ async def show_hse_programs(message: types.Message, state: FSMContext):
     try:
         data = await state.get_data()
         user_scores = data.get("scores", {})
-        total_score = sum(user_scores.values())
+        
+        # Расчет базовых баллов
+        rus = user_scores.get("rus", 0)
+        math = user_scores.get("math", 0)
+        fiz = user_scores.get("fiz", 0)
+        inf = user_scores.get("inf", 0)
         
         response = ["📚 Подходящие программы НИЯУ МИФИ:"]
         has_programs = False
@@ -674,72 +709,77 @@ async def show_hse_programs(message: types.Message, state: FSMContext):
             
             for program in programs:
                 meets_requirements = True
+                
+                # Определение способа расчета баллов
+                if program["optional"]:
+                    # Случай с выборочными предметами
+                    total_score = rus + math + max(fiz, inf)
+                elif program["fiz"] is None or program["inf"] is None:
+                    # Случай с прочерком в одном из предметов
+                    total_score = rus + math + (fiz if program["inf"] is None else inf)
+                else:
+                    # Общий случай (4 предмета)
+                    total_score = rus + math + fiz + inf
+                
                 score_diff = program["total_score"] - total_score
                 
-                # Проверка обязательных предметов
-                if program["math"] is not None and\
-                  user_scores.get("math", 0) < program["math"]:
-                    meets_requirements = False
-                if program["rus"] is not None and\
-                  user_scores.get("rus", 0) < program["rus"]:
-                    meets_requirements = False
+                # Проверка минимальных баллов по предметам
+                required_checks = [
+                    ("math", program["math"]),
+                    ("rus", program["rus"]),
+                    ("fiz", program["fiz"]),
+                    ("inf", program["inf"])
+                ]
                 
-                # Проверка выборочных или обязательных предметов
+                for subject, min_score in required_checks:
+                    if min_score is not None and user_scores.get(subject, 0) < min_score:
+                        meets_requirements = False
+                        break
+                
+                # Проверка выборочных предметов
                 if program["optional"]:
-                    # Только выборочные предметы
                     elective_passed = any(
                         user_scores.get(subj, 0) >= program.get(subj, 0)
                         for subj in program["optional"]
-                        if subj in user_scores
                     )
                     if not elective_passed:
                         meets_requirements = False
-                else:
-                    # Обязательные предметы (если нет выборочных)
-                    if program["fiz"] is not None and\
-                      user_scores.get("fiz", 0) < program["fiz"]:
-                        meets_requirements = False
-                    if program["inf"] is not None and\
-                      user_scores.get("inf", 0) < program["inf"]:
-                        meets_requirements = False
-                
+
                 # Проверка проходного балла
-                if meets_requirements and\
-                  total_score + 10 < program["total_score"]:
+                if meets_requirements and total_score + 10 < program["total_score"]:
                     meets_requirements = False
                 
-                min_scores = []
-                for subj, name in [("math", "Математика"), ("rus", "Русский"), 
-                                     ("fiz", "Физика"),\
-                                       ("inf", "Информатика")]:
-                        if program[subj] is not None:
-                            min_scores.append(f"{name}: {program[subj]}")
-
-
+                # Формирование информации о программе
                 if meets_requirements:
-                    # Форматирование программы
-                    program_info = [
-                        f"🎓 Программа: {program['description']}",
-                        f"├ Минимум: {', '.join(min_scores)}\n"
-                        
+                    min_scores = [
+                        f"{name}: {program[subj]}" 
+                        for subj, name in [
+                            ("math", "Математика"), 
+                            ("rus", "Русский"),
+                            ("fiz", "Физика"),
+                            ("inf", "Информатика")
+                        ] 
+                        if program[subj] is not None
                     ]
                     
-                    
-                    
-                    
-                    
-                    # Добавляем статус
+                    program_info = [
+                        f"🎓 Программа: {program['description']}",
+                        f"├ Минимум: {', '.join(min_scores)}",
+                        f"├ Твой суммарный балл: {total_score}",
+                    ]
+
                     if total_score >= program["total_score"]:
-                        program_info.append(f"├ Примерный проходной балл: {program['total_score']} \n"
-                                            f"├ ✅ Вероятность пройти очень высокая!\n"
-                                            f"└ ДВИ: {'✅' if program['dvi_required'] == 'да' else 'Не требуется'}\n"
-                                            )
+                        program_info.extend([
+                            f"├ Примерный проходной балл: {program['total_score']}",
+                            "├ ✅ Вероятность пройти очень высокая!",
+                            f"└ ДВИ: {'✅' if program['dvi_required'] == 'да' else 'Не требуется'}"
+                        ])
                     else:
-                        program_info.append(
-                            f"⚠️ Вероятность пройти достаточно высокая! (Не хватает ~{score_diff} баллов\n"
-                            f"├ Проверь, есть ли у тебя баллы за индивидуальные достижения.\n"
-                            f"└ ДВИ: {'✅' if program['dvi_required'] == 'да' else 'Не требуется'}\n"
-                        )
+                        program_info.extend([
+                            f"⚠️ Не хватает ~{score_diff} баллов",
+                            "├ Проверь индивидуальные достижения",
+                            f"└ ДВИ: {'✅' if program['dvi_required'] == 'да' else 'Не требуется'}"
+                        ])
                     
                     direction_programs.append("\n".join(program_info))
                     has_programs = True
@@ -748,10 +788,9 @@ async def show_hse_programs(message: types.Message, state: FSMContext):
                 response.append(f"\n🔹 {direction}:")
                 response.extend(direction_programs)
                 
-        
-        await message.answer("\n".join(response) if\
-                              has_programs else "😔 Нет подходящих программ")
+        await message.answer("\n".join(response) if has_programs else "😔 Нет подходящих программ")
         
     except Exception as e:
         await message.answer(f"Ошибка: {str(e)}")
         print(f"Ошибка: {e}")
+
