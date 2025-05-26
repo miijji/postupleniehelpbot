@@ -3,8 +3,8 @@ from aiogram import Bot, Dispatcher
 
 
 from app.handlers import router
-from config import BOT_TOKEN
 
+from config import BOT_TOKEN
 
 
 
