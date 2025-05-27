@@ -55,12 +55,12 @@ def load_universities(file_path):
         }
 
         # Обработка выборочных предметов
-        if pd.notna(row.get("Выборочные предметы", "")) and row["Выборочные предметы"] != "-":
-            program["optional"] = [
-                "fiz" if "physics" in s.lower() else "inf" 
-                for s in str(row["Выборочные предметы"]).split(", ") 
-                if s.strip()
-            ]
+        if pd.notna(row.get("Выборочные предметы", "")) and\
+              row["Выборочные предметы"] != "-":
+            program["optional"] = []
+            if "physics" in str(row["Выборочные предметы"]).split(", "):  
+                program["optional"] = ["fiz", "inf"]
+        
 
         # Добавляем минимальные баллы с конвертацией ключей
         subject_mapping = {
@@ -87,7 +87,8 @@ SUBJECT_COMBINATIONS = {
         {"name": "РУС+МАТ+ФИЗ", "subjects": ["rus", "math", "fiz"]}
     ],
     4: [  
-        {"name": "РУС+МАТ+ИНФ+ФИЗ", "subjects": ["rus", "math", "inf", "fiz"]}
+        {"name": "РУС+МАТ+ИНФ+ФИЗ", "subjects": \
+         ["rus", "math", "inf", "fiz"]}
     ]
 }
 
@@ -140,7 +141,7 @@ async def process_combo(callback: types.CallbackQuery, state: FSMContext):
     # Запрашиваем первый предмет
     data = await state.get_data()
     first_subject = data["subjects"][0]
-    await callback.message.answer(f"Введи балл по {get_subject_name_komu_chemu(first_subject)}:")
+    await callback.message.answer(f"Введи балл по {name_komu_chemu(first_subject)}:")
     await state.set_state(Form.input_scores)
     await callback.answer()
 
@@ -166,7 +167,7 @@ async def process_score(message: types.Message, state: FSMContext):
             current_subject=current_idx + 1
         )
         next_subject = subjects[current_idx + 1]
-        await message.answer(f"Введи балл по {get_subject_name_komu_chemu(next_subject)}:")
+        await message.answer(f"Введи балл по {name_komu_chemu(next_subject)}:")
     else:
         await state.update_data(scores=scores)
         await show_final_results(message, state)
@@ -178,7 +179,7 @@ def validate_score(score: str) -> bool:
     except ValueError:
         return False
 
-def get_subject_name_komu_chemu(code: str) -> str:
+def name_komu_chemu(code: str) -> str:
     names = {
         "rus": "русскому языку",
         "math": "математике", 
@@ -187,7 +188,7 @@ def get_subject_name_komu_chemu(code: str) -> str:
     }
     return names.get(code, "предмету")
 
-def get_subject_name_kto_chto(code: str) -> str:
+def name_kto_chto(code: str) -> str:
     names = {
         "rus": "русский язык",
         "math": "математика", 
@@ -203,7 +204,7 @@ async def show_final_results(message: types.Message, state: FSMContext):
     scores = data["scores"]
     result = [
         "✅ Твои результаты:",
-        *[f"• {get_subject_name_kto_chto(subj).capitalize()}: {score}" 
+        *[f"• {name_kto_chto(subj).capitalize()}: {score}" 
           for subj, score in scores.items()],
         f"\n🧮 Сумма баллов: {sum(scores.values())}",
         "\n🏫 Выбери вуз:",
@@ -260,7 +261,8 @@ async def show_hse_programs(message: types.Message, state: FSMContext):
                     total_score = rus + math + max(fiz, inf)
                 elif program["fiz"] is None or program["inf"] is None:
                     # Случай с прочерком в одном из предметов
-                    total_score = rus + math + (fiz if program["inf"] is None else inf)
+                    total_score = rus + math\
+                          + (fiz if program["inf"] is None else inf)
                 else:
                     # Общий случай (4 предмета)
                     total_score = rus + math + fiz + inf
@@ -276,7 +278,8 @@ async def show_hse_programs(message: types.Message, state: FSMContext):
                 ]
                 
                 for subject, min_score in required_checks:
-                    if min_score is not None and user_scores.get(subject, 0) < min_score:
+                    if min_score is not None and\
+                          user_scores.get(subject, 0) < min_score:
                         meets_requirements = False
                         break
                 
@@ -290,7 +293,8 @@ async def show_hse_programs(message: types.Message, state: FSMContext):
                         meets_requirements = False
 
                 # Проверка проходного балла
-                if meets_requirements and total_score + 10 < program["total_score"]:
+                if meets_requirements and\
+                      total_score + 10 < program["total_score"]:
                     meets_requirements = False
                 
                 # Формирование информации о программе
@@ -332,8 +336,9 @@ async def show_hse_programs(message: types.Message, state: FSMContext):
                 response.append(f"\n🔹 {direction}:")
                 response.extend(direction_programs)
                 
-        await message.answer("\n".join(response) if has_programs else "😔 Нет подходящих программ")
-        
+        await message.answer("\n".join(response) if\
+                              has_programs else "😔 Нет подходящих программ")
+        await state.clear()
     except Exception as e:
         await message.answer(f"Ошибка: {str(e)}")
         print(f"Ошибка: {e}")
@@ -375,7 +380,8 @@ async def show_mipt_programs(message: types.Message, state: FSMContext):
                     total_score = rus + math + max(fiz, inf)
                 elif program["fiz"] is None or program["inf"] is None:
                     # Случай с прочерком в одном из предметов
-                    total_score = rus + math + (fiz if program["inf"] is None else inf)
+                    total_score = rus + math +\
+                          (fiz if program["inf"] is None else inf)
                 else:
                     # Общий случай (4 предмета)
                     total_score = rus + math + fiz + inf
@@ -391,7 +397,8 @@ async def show_mipt_programs(message: types.Message, state: FSMContext):
                 ]
                 
                 for subject, min_score in required_checks:
-                    if min_score is not None and user_scores.get(subject, 0) < min_score:
+                    if min_score is not None and\
+                          user_scores.get(subject, 0) < min_score:
                         meets_requirements = False
                         break
                 
@@ -405,7 +412,8 @@ async def show_mipt_programs(message: types.Message, state: FSMContext):
                         meets_requirements = False
 
                 # Проверка проходного балла
-                if meets_requirements and total_score + 10 < program["total_score"]:
+                if meets_requirements and total_score\
+                      + 10 < program["total_score"]:
                     meets_requirements = False
                 
                 # Формирование информации о программе
@@ -447,8 +455,9 @@ async def show_mipt_programs(message: types.Message, state: FSMContext):
                 response.append(f"\n🔹 {direction}:")
                 response.extend(direction_programs)
                 
-        await message.answer("\n".join(response) if has_programs else "😔 Нет подходящих программ")
-        
+        await message.answer("\n".join(response) if\
+                              has_programs else "😔 Нет подходящих программ")
+        await state.clear()
     except Exception as e:
         await message.answer(f"Ошибка: {str(e)}")
         print(f"Ошибка: {e}")
@@ -490,7 +499,8 @@ async def show_msu_programs(message: types.Message, state: FSMContext):
                 if program["optional"]:
                     total_score = rus + math + max(fiz, inf)
                 elif program["fiz"] is None or program["inf"] is None:
-                    total_score = rus + math + (fiz if program["inf"] is None else inf)
+                    total_score = rus + \
+                        math + (fiz if program["inf"] is None else inf)
                 else:
                     total_score = rus + math + fiz + inf
                 
@@ -505,7 +515,8 @@ async def show_msu_programs(message: types.Message, state: FSMContext):
                 ]
                 
                 for subject, min_score in required_checks:
-                    if min_score is not None and user_scores.get(subject, 0) < min_score:
+                    if min_score is not None and\
+                          user_scores.get(subject, 0) < min_score:
                         meets_requirements = False
                         break
 
@@ -520,12 +531,14 @@ async def show_msu_programs(message: types.Message, state: FSMContext):
 
                 # Особые условия для ДВИ
                 if program["dvi_required"] == "да":
-                    if meets_requirements and (0 < score_diff <= DVI_THRESHOLD):
+                    if meets_requirements and\
+                          (0 < score_diff <= DVI_THRESHOLD):
                         is_near = True
                     elif total_score < program["total_score"] - DVI_THRESHOLD:
                         meets_requirements = False
                 else:
-                    if meets_requirements and total_score < program["total_score"]:
+                    if meets_requirements and \
+                        total_score < program["total_score"]:
                         meets_requirements = False
 
                 if meets_requirements:
@@ -565,8 +578,9 @@ async def show_msu_programs(message: types.Message, state: FSMContext):
                 response.append(f"\n🔹 {direction}:")
                 response.extend(direction_programs)
         
-        await message.answer("\n".join(response) if has_programs else "😔 Нет подходящих программ")
-        
+        await message.answer("\n".join(response)\
+                              if has_programs else "😔 Нет подходящих программ")
+        await state.clear()
     except Exception as e:
         await message.answer(f"Ошибка: {str(e)}")
         print(f"Ошибка: {e}")
@@ -604,7 +618,8 @@ async def show_bmstu_programs(message: types.Message, state: FSMContext):
                     total_score = rus + math + max(fiz, inf)
                 elif program["fiz"] is None or program["inf"] is None:
                     # Случай с прочерком в одном из предметов
-                    total_score = rus + math + (fiz if program["inf"] is None else inf)
+                    total_score = rus + math\
+                          + (fiz if program["inf"] is None else inf)
                 else:
                     # Общий случай (4 предмета)
                     total_score = rus + math + fiz + inf
@@ -620,7 +635,8 @@ async def show_bmstu_programs(message: types.Message, state: FSMContext):
                 ]
                 
                 for subject, min_score in required_checks:
-                    if min_score is not None and user_scores.get(subject, 0) < min_score:
+                    if min_score is not None and \
+                        user_scores.get(subject, 0) < min_score:
                         meets_requirements = False
                         break
                 
@@ -634,7 +650,8 @@ async def show_bmstu_programs(message: types.Message, state: FSMContext):
                         meets_requirements = False
 
                 # Проверка проходного балла
-                if meets_requirements and total_score + 10 < program["total_score"]:
+                if meets_requirements and total_score\
+                      + 10 < program["total_score"]:
                     meets_requirements = False
                 
                 # Формирование информации о программе
@@ -676,8 +693,9 @@ async def show_bmstu_programs(message: types.Message, state: FSMContext):
                 response.append(f"\n🔹 {direction}:")
                 response.extend(direction_programs)
                 
-        await message.answer("\n".join(response) if has_programs else "😔 Нет подходящих программ")
-        
+        await message.answer("\n".join(response) if\
+                              has_programs else "😔 Нет подходящих программ")
+        await state.clear()
     except Exception as e:
         await message.answer(f"Ошибка: {str(e)}")
         print(f"Ошибка: {e}")
@@ -716,7 +734,8 @@ async def show_mephi_programs(message: types.Message, state: FSMContext):
                     total_score = rus + math + max(fiz, inf)
                 elif program["fiz"] is None or program["inf"] is None:
                     # Случай с прочерком в одном из предметов
-                    total_score = rus + math + (fiz if program["inf"] is None else inf)
+                    total_score = rus + math + (fiz if program["inf"] \
+                                                is None else inf)
                 else:
                     # Общий случай (4 предмета)
                     total_score = rus + math + fiz + inf
@@ -732,7 +751,8 @@ async def show_mephi_programs(message: types.Message, state: FSMContext):
                 ]
                 
                 for subject, min_score in required_checks:
-                    if min_score is not None and user_scores.get(subject, 0) < min_score:
+                    if min_score is not None and\
+                          user_scores.get(subject, 0) < min_score:
                         meets_requirements = False
                         break
                 
@@ -746,7 +766,8 @@ async def show_mephi_programs(message: types.Message, state: FSMContext):
                         meets_requirements = False
 
                 # Проверка проходного балла
-                if meets_requirements and total_score + 10 < program["total_score"]:
+                if meets_requirements and total_score + 10\
+                      < program["total_score"]:
                     meets_requirements = False
                 
                 # Формирование информации о программе
@@ -789,7 +810,7 @@ async def show_mephi_programs(message: types.Message, state: FSMContext):
                 response.extend(direction_programs)
                 
         await message.answer("\n".join(response) if has_programs else "😔 Нет подходящих программ")
-        
+        await state.clear()
     except Exception as e:
         await message.answer(f"Ошибка: {str(e)}")
         print(f"Ошибка: {e}")
