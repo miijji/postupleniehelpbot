@@ -344,7 +344,7 @@ async def show_hse_programs(message: types.Message, state: FSMContext):
 
 
 @router.message(Command("mipt"))
-async def show_hse_programs(message: types.Message, state: FSMContext):
+async def show_mipt_programs(message: types.Message, state: FSMContext):
     try:
         data = await state.get_data()
         user_scores = data.get("scores", {})
@@ -573,7 +573,7 @@ async def show_msu_programs(message: types.Message, state: FSMContext):
 
 
 @router.message(Command("bmstu"))
-async def show_hse_programs(message: types.Message, state: FSMContext):
+async def show_bmstu_programs(message: types.Message, state: FSMContext):
     try:
         data = await state.get_data()
         user_scores = data.get("scores", {})
@@ -685,7 +685,7 @@ async def show_hse_programs(message: types.Message, state: FSMContext):
 
 
 @router.message(Command("mephi"))
-async def show_hse_programs(message: types.Message, state: FSMContext):
+async def show_mephi_programs(message: types.Message, state: FSMContext):
     try:
         data = await state.get_data()
         user_scores = data.get("scores", {})
